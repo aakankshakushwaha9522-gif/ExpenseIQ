@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>ExpenseIQ — AI Expense Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- ═════════ BOOT / SETUP-ERROR OVERLAY ═════════ -->
+<div class="fullscreen-overlay" id="boot-overlay" role="status" aria-live="polite">
+  <div class="boot-card">
+    <div class="spinner" aria-hidden="true"></div>
+    <div id="boot-text">Starting ExpenseIQ…</div>
+  </div>
+</div>
+
+<div class="fullscreen-overlay hidden" id="setup-overlay" role="alert">
+  <div class="auth-card">
+    <div class="auth-brand">⚙️ Setup required</div>
+    <p class="auth-sub" id="setup-msg"></p>
+    <ul class="setup-list" id="setup-list"></ul>
+    <p class="auth-sub">Make sure the server is running (<code>npm start</code>), then reload the page.</p>
+  </div>
+</div>
+
+<!-- ═════════ AUTH ═════════ -->
+<div class="fullscreen-overlay hidden" id="auth-overlay">
+  <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="auth-brand"><span aria-hidden="true">💰</span> ExpenseIQ</div>
+    <h1 class="auth-title" id="auth-title">Sign in</h1>
+    <p class="auth-sub" id="auth-sub">Welcome back. Sign in to see your expenses.</p>
+
+    <form id="auth-form" novalidate>
+      <div class="form-group" id="auth-name-wrap" hidden>
+        <label class="form-label" for="auth-name">Name (optional)</label>
+        <input class="form-input" id="auth-name" type="text" autocomplete="name" maxlength="60" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="auth-email">Email</label>
+        <input class="form-input" id="auth-email" type="email" autocomplete="email" required />
+      </div>
+      <div class="form-group" id="auth-pass-wrap">
+        <label class="form-label" for="auth-pass">Password</label>
+        <input class="form-input" id="auth-pass" type="password" autocomplete="current-password" minlength="8" required />
+      </div>
+      <div id="auth-feedback" class="feedback hidden" role="alert"></div>
+      <button class="btn btn-primary auth-submit" type="submit" id="auth-submit">Sign in</button>
+    </form>
+
+    <div class="auth-links">
+      <button type="button" class="text-btn" data-action="auth-mode" data-arg="register" id="auth-link-register">Create an account</button>
+      <button type="button" class="text-btn hidden" data-action="auth-mode" data-arg="login" id="auth-link-login">Back to sign in</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════ SIDEBAR ═════════ -->
+<aside class="sidebar" id="sidebar" aria-label="Primary">
+  <div class="sidebar-brand">
+    <span class="brand-icon" aria-hidden="true">💰</span>
+    <span class="brand-name">ExpenseIQ</span>
+  </div>
+
+  <nav class="sidebar-nav" aria-label="Main navigation">
+    <a href="#" class="nav-link active" data-screen="dashboard"><span class="nav-icon" aria-hidden="true">📊</span> Dashboard</a>
+    <a href="#" class="nav-link" data-screen="add"><span class="nav-icon" aria-hidden="true">➕</span> Add Transaction</a>
+    <a href="#" class="nav-link" data-screen="expenses"><span class="nav-icon" aria-hidden="true">📋</span> View Expenses</a>
+    <a href="#" class="nav-link" data-screen="income"><span class="nav-icon" aria-hidden="true">💵</span> Income</a>
+    <a href="#" class="nav-link" data-screen="budget"><span class="nav-icon" aria-hidden="true">🎯</span> Budget Tracker</a>
+    <a href="#" class="nav-link" data-screen="reports"><span class="nav-icon" aria-hidden="true">📈</span> Reports</a>
+    <a href="#" class="nav-link" data-screen="assistant"><span class="nav-icon" aria-hidden="true">🤖</span> AI Assistant</a>
+    <a href="#" class="nav-link" data-screen="io"><span class="nav-icon" aria-hidden="true">💾</span> Save / Load</a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="month-budget-mini" id="sidebar-budget-mini"></div>
+    <div class="user-box">
+      <div class="user-email" id="user-email" title=""></div>
+      <button class="btn btn-ghost btn-sm" data-action="logout" type="button">Sign out</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ═════════ MAIN ═════════ -->
+<div class="layout">
+  <header class="topbar">
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-controls="sidebar" aria-expanded="false" type="button">☰</button>
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="sync-pill" id="sync-pill" role="status" aria-live="polite" title="Live connection to the server">
+      <span class="sync-dot" aria-hidden="true"></span><span id="sync-text">Connecting…</span>
+    </div>
+    <div class="topbar-month" id="topbar-month"></div>
+  </header>
+
+  <div class="offline-banner hidden" id="offline-banner" role="alert">
+    You are offline. Changes are saved on this device and will sync automatically when the connection returns.
+  </div>
+
+  <main class="main-content" id="main" tabindex="-1">
+
+    <!-- data loading skeleton -->
+    <div class="card loading-card" id="data-loading" role="status">
+      <div class="spinner" aria-hidden="true"></div> Loading your data…
+    </div>
+    <div class="feedback error hidden" id="data-error" role="alert"></div>
+
+    <!-- ─── DASHBOARD ─── -->
+    <section id="screen-dashboard" class="screen active" aria-labelledby="h-dashboard">
+      <div class="page-header">
+        <h1 class="page-title" id="h-dashboard">Dashboard</h1>
+        <p class="page-sub" id="dash-greeting"></p>
+      </div>
+
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <div class="two-col">
+        <div class="card chart-card">
+          <div class="card-header">
+            <span class="card-title">Spending by Category</span>
+            <span class="chip" id="dash-month-label"></span>
+          </div>
+          <div class="chart-wrap"><canvas id="catBarChart" role="img" aria-label="Bar chart of this month's spending by category"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <div class="card-header"><span class="card-title">Category Distribution</span></div>
+          <div class="chart-wrap"><canvas id="catDonutChart" role="img" aria-label="Doughnut chart of category distribution"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Recent Expenses</span>
+          <button class="text-btn" data-action="goto" data-arg="expenses" type="button">View all →</button>
+        </div>
+        <div id="dash-recent-list"></div>
+      </div>
+    </section>
+
+    <!-- ─── ADD ─── -->
+    <section id="screen-add" class="screen" aria-labelledby="h-add">
+      <div class="page-header">
+        <h1 class="page-title" id="h-add">Add Transaction</h1>
+        <p class="page-sub">Log an expense or income. It appears on every open device instantly.</p>
+      </div>
+
+      <div class="card form-card">
+        <div class="segmented" role="radiogroup" aria-label="Transaction type">
+          <button type="button" class="seg active" role="radio" aria-checked="true" data-action="set-kind" data-arg="expense" id="seg-expense">Expense</button>
+          <button type="button" class="seg" role="radio" aria-checked="false" data-action="set-kind" data-arg="income" id="seg-income">Income</button>
+        </div>
+        <form class="form-grid" id="add-form" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="in-date">📅 Date</label>
+            <input class="form-input" type="date" id="in-date" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="in-cat">🏷️ Category</label>
+            <select class="form-input" id="in-cat" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="in-amount">💵 Amount (₹)</label>
+            <input class="form-input" type="number" id="in-amount" placeholder="0.00" min="0.01" step="0.01" inputmode="decimal" required />
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="in-desc">📝 Description</label>
+            <input class="form-input" type="text" id="in-desc" placeholder="e.g. Lunch with friends" maxlength="120" required />
+          </div>
+          <div class="form-actions form-group--full">
+            <button class="btn btn-ghost" type="button" data-action="reset-add">Clear</button>
+            <button class="btn btn-primary" type="submit" id="add-submit">Add Expense</button>
+          </div>
+        </form>
+        <div id="add-feedback" class="feedback hidden" role="status"></div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem">
+        <div class="card-header"><span class="card-title">Quick-pick category</span></div>
+        <div class="quick-cats" id="quick-cats"></div>
+      </div>
+    </section>
+
+    <!-- ─── EXPENSES ─── -->
+    <section id="screen-expenses" class="screen" aria-labelledby="h-expenses">
+      <div class="page-header">
+        <h1 class="page-title" id="h-expenses">All Expenses</h1>
+        <p class="page-sub" id="expenses-count-label"></p>
+      </div>
+
+      <div class="card filter-bar">
+        <div class="filter-row">
+          <div class="form-group">
+            <label class="form-label" for="filter-cat">Category</label>
+            <select class="form-input" id="filter-cat"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="filter-from">From date</label>
+            <input class="form-input" type="date" id="filter-from" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="filter-to">To date</label>
+            <input class="form-input" type="date" id="filter-to" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="filter-sort">Sort by</label>
+            <select class="form-input" id="filter-sort">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="highest">Highest amount</option>
+              <option value="lowest">Lowest amount</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="filter-search">Search</label>
+            <input class="form-input" type="search" id="filter-search" placeholder="Search description…" maxlength="60" />
+          </div>
+        </div>
+        <div class="filter-footer">
+          <div class="filter-summary" id="filter-summary" aria-live="polite"></div>
+          <div class="filter-presets">
+            <button class="text-btn" type="button" data-action="preset-month">This month</button>
+            <button class="text-btn" type="button" data-action="clear-filters">Clear filters</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card table-card" id="expense-table-wrap">
+        <table class="expense-table" id="expense-table">
+          <caption class="sr-only">Expenses</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">Category</th><th scope="col">Description</th><th scope="col">Amount</th><th scope="col">Actions</th></tr></thead>
+          <tbody id="expense-tbody"></tbody>
+        </table>
+        <div id="expense-empty" class="empty-state hidden">
+          <div class="empty-icon" aria-hidden="true">🧾</div>
+          <div class="empty-title" id="expense-empty-title">No expenses found</div>
+          <div class="empty-sub" id="expense-empty-sub">Try adjusting your filters or add a new expense.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── INCOME ─── -->
+    <section id="screen-income" class="screen" aria-labelledby="h-income">
+      <div class="page-header">
+        <h1 class="page-title" id="h-income">Income</h1>
+        <p class="page-sub" id="income-count-label"></p>
+      </div>
+      <div class="card table-card">
+        <table class="expense-table">
+          <caption class="sr-only">Income</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">Source</th><th scope="col">Description</th><th scope="col">Amount</th><th scope="col">Actions</th></tr></thead>
+          <tbody id="income-tbody"></tbody>
+        </table>
+        <div id="income-empty" class="empty-state hidden">
+          <div class="empty-icon" aria-hidden="true">💵</div>
+          <div class="empty-title">No income recorded</div>
+          <div class="empty-sub">Use “Add Transaction” → Income to record salary or other earnings.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── BUDGET ─── -->
+    <section id="screen-budget" class="screen" aria-labelledby="h-budget">
+      <div class="page-header">
+        <h1 class="page-title" id="h-budget">Budget Tracker</h1>
+        <p class="page-sub">Set and monitor your monthly spending limits</p>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Set Monthly Budget</span></div>
+          <form id="budget-form" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="bud-month">Month</label>
+              <input class="form-input" type="month" id="bud-month" required />
+            </div>
+            <div class="form-group" style="margin-top:12px">
+              <label class="form-label" for="bud-amount">Total Budget (₹)</label>
+              <input class="form-input" type="number" id="bud-amount" placeholder="e.g. 20000" min="1" step="0.01" inputmode="decimal" required />
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:14px" type="submit">Save Budget</button>
+          </form>
+          <div id="budget-feedback" class="feedback hidden" role="status"></div>
+        </div>
+
+        <div class="card" id="budget-status-card">
+          <div class="card-header"><span class="card-title" id="budget-status-title">This Month's Status</span></div>
+          <div id="budget-status-body"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-header"><span class="card-title">Category Breakdown</span></div>
+        <div id="budget-cat-breakdown"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-header"><span class="card-title">All Budgets</span></div>
+        <div id="budget-list"></div>
+      </div>
+    </section>
+
+    <!-- ─── REPORTS ─── -->
+    <section id="screen-reports" class="screen" aria-labelledby="h-reports">
+      <div class="page-header">
+        <h1 class="page-title" id="h-reports">Reports</h1>
+        <p class="page-sub">Visualize spending trends over time</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Monthly Spending Trend</span>
+          <label class="sr-only" for="trend-months">Period</label>
+          <select class="form-input" id="trend-months" style="width:auto;font-size:13px;padding:4px 8px">
+            <option value="6">Last 6 months</option>
+            <option value="12">Last 12 months</option>
+          </select>
+        </div>
+        <div class="chart-wrap" style="height:260px"><canvas id="trendChart" role="img" aria-label="Line chart of monthly spending versus budget"></canvas></div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem">
+        <div class="card-header"><span class="card-title">Top Spending Days</span></div>
+        <div id="top-days-list"></div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem">
+        <div class="card-header"><span class="card-title">Statistics</span></div>
+        <div class="stats-grid" id="stats-grid"></div>
+      </div>
+    </section>
+
+    <!-- ─── AI ASSISTANT ─── -->
+    <section id="screen-assistant" class="screen" aria-labelledby="h-assistant">
+      <div class="page-header page-header--row">
+        <div>
+          <h1 class="page-title" id="h-assistant">AI Assistant</h1>
+          <p class="page-sub">Ask about your spending in plain English. Numbers are calculated by the server from your latest data.</p>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button" data-action="chat-clear">Clear chat</button>
+      </div>
+
+      <div class="card chat-card">
+        <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="Conversation with the AI assistant"></div>
+        <div class="chat-suggestions" id="chat-suggestions"></div>
+        <form class="chat-form" id="chat-form" autocomplete="off">
+          <label class="sr-only" for="chat-input">Your question</label>
+          <input class="form-input" id="chat-input" type="text" maxlength="500" placeholder="e.g. Which category costs me the most?" />
+          <button class="btn btn-primary" type="submit" id="chat-send">Send</button>
+        </form>
+        <div class="chat-hint">Powered by Google Gemini · only your own data is shared · not financial advice</div>
+      </div>
+    </section>
+
+    <!-- ─── SAVE / LOAD ─── -->
+    <section id="screen-io" class="screen" aria-labelledby="h-io">
+      <div class="page-header">
+        <h1 class="page-title" id="h-io">Save &amp; Load</h1>
+        <p class="page-sub">Export to CSV or import previously saved data</p>
+      </div>
+
+      <div class="io-grid">
+        <div class="card io-card">
+          <div class="io-icon" aria-hidden="true">⬇️</div>
+          <h2 class="io-title">Export to CSV</h2>
+          <p class="io-desc">Download all your expenses as a <code>.csv</code> file (date, category, amount, description).</p>
+          <button class="btn btn-primary" type="button" data-action="export-csv">Download expenses.csv</button>
+        </div>
+
+        <div class="card io-card">
+          <div class="io-icon" aria-hidden="true">⬆️</div>
+          <h2 class="io-title">Import from CSV</h2>
+          <p class="io-desc">Upload a <code>.csv</code> with columns date, category, amount, description. Rows already in your account are skipped, so re-uploading never creates duplicates.</p>
+          <label class="btn btn-outline file-label">
+            Choose CSV file
+            <input type="file" id="csv-file" accept=".csv,text/csv" class="sr-only-input" />
+          </label>
+          <div id="import-feedback" class="feedback hidden" role="status" style="margin-top:.75rem"></div>
+        </div>
+
+        <div class="card io-card">
+          <div class="io-icon" aria-hidden="true">📋</div>
+          <h2 class="io-title">Export Budget</h2>
+          <p class="io-desc">Save your monthly budget settings as a <code>.json</code> file for backup.</p>
+          <button class="btn btn-outline" type="button" data-action="export-budgets">Download budgets.json</button>
+        </div>
+
+        <div class="card io-card danger-card">
+          <div class="io-icon" aria-hidden="true">🗑️</div>
+          <h2 class="io-title">Clear All Data</h2>
+          <p class="io-desc">Permanently delete all expenses, income and budgets from your account on every device. This cannot be undone.</p>
+          <button class="btn btn-danger" type="button" data-action="clear-all">Clear Everything</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem">
+        <div class="card-header"><span class="card-title">Data Summary</span></div>
+        <div id="io-summary"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Confirm modal -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
+    <div class="modal-title" id="modal-title"></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" data-action="modal-cancel" id="modal-cancel">Cancel</button>
+      <button class="btn btn-danger" type="button" id="modal-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-overlay hidden" id="edit-overlay">
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <div class="modal-title" id="edit-title">Edit</div>
+    <form id="edit-form" novalidate>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label" for="ed-date">Date</label><input class="form-input" type="date" id="ed-date" required /></div>
+        <div class="form-group"><label class="form-label" for="ed-cat">Category</label><select class="form-input" id="ed-cat"></select></div>
+        <div class="form-group"><label class="form-label" for="ed-amount">Amount (₹)</label><input class="form-input" type="number" id="ed-amount" min="0.01" step="0.01" inputmode="decimal" required /></div>
+        <div class="form-group form-group--full"><label class="form-label" for="ed-desc">Description</label><input class="form-input" type="text" id="ed-desc" maxlength="120" required /></div>
+      </div>
+      <div id="edit-feedback" class="feedback hidden" role="alert"></div>
+      <div class="modal-actions" style="margin-top:18px">
+        <button class="btn btn-ghost" type="button" data-action="edit-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Legacy-data migration modal -->
+<div class="modal-overlay hidden" id="migrate-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="migrate-title" aria-describedby="migrate-body">
+    <div class="modal-title" id="migrate-title">Import data from this browser?</div>
+    <div class="modal-body" id="migrate-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" data-action="migrate-skip">Skip</button>
+      <button class="btn btn-primary" type="button" data-action="migrate-import" id="migrate-import">Import to my account</button>
+    </div>
+  </div>
+</div>
+<!-- Chart.js (pinned version, same one the original project used) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script src="js/shared.js"></script>
+<script src="js/data.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
